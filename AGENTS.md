@@ -9,3 +9,4 @@ Detailed guidance for AI agents working on this codebase.
 ## Reference
 
 - [General coding guidelines](agents/guidelines.md)
+- [Fuzzing](agents/fuzzing.md)
