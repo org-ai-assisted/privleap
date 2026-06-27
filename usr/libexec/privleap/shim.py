@@ -98,6 +98,29 @@ except Exception:
 pam_env_list: list[str] = pam_obj.getenvlist()
 
 action_env: dict[str, str] = os.environ.copy()
+
+## Scrub the variables systemd's service manager injects into privleapd for
+## its own use (the sd_notify, socket-activation, and watchdog protocols).
+## They are meaningless to an action and grant it a capability it should not
+## have: an action runs in privleapd's cgroup, so NOTIFY_SOCKET would let it
+## talk to the manager's notify socket, LISTEN_FDS would hand it privleapd's
+## activation file descriptors, and WATCHDOG_* would let it pet the service
+## watchdog. systemd's NotifyAccess=main already rejects notifications from a
+## non-main PID, so this is defence in depth rather than a fix for an
+## exploitable bug; it also keeps actions from inheriting a confusing,
+## privleapd-specific environment. This removes only the manager-injected
+## protocol variables, NOT any PAM-provided variables (those remain trusted,
+## see agents/guidelines.md).
+for systemd_manager_env_var in (
+    "NOTIFY_SOCKET",
+    "LISTEN_PID",
+    "LISTEN_FDS",
+    "LISTEN_FDNAMES",
+    "WATCHDOG_PID",
+    "WATCHDOG_USEC",
+):
+    action_env.pop(systemd_manager_env_var, None)
+
 action_env["HOME"] = target_user_info.pw_dir
 action_env["LOGNAME"] = target_user_info.pw_name
 action_env["SHELL"] = "/usr/bin/bash"

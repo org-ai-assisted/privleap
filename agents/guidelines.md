@@ -17,6 +17,18 @@ changes that have already been evaluated and resolved.
 - **PAM environment variables are trusted.** Do not add env-var whitelisting in
   `shim.py`. If `pam_env.so` passes something through, that is the system
   administrator's decision.
+- **systemd manager variables are scrubbed from the action environment.**
+  `shim.py` removes the service-manager protocol variables systemd injects into
+  `privleapd` (`NOTIFY_SOCKET`, `LISTEN_PID`, `LISTEN_FDS`, `LISTEN_FDNAMES`,
+  `WATCHDOG_PID`, `WATCHDOG_USEC`) before running an action. An action runs in
+  `privleapd`'s cgroup, so leaving these would let it reach the manager's notify
+  socket, inherit privleapd's socket-activation file descriptors, or pet the
+  service watchdog. This is **distinct from** the PAM-env-trust rule above and
+  not in tension with it: it strips manager-injected variables out of the
+  inherited base environment, it does not filter anything `pam_env` provides.
+  `NotifyAccess=main` already rejects notifications from a non-main PID, so this
+  is defence in depth, not a fix for an exploitable bug. Do not re-add these
+  variables to the action environment.
 - **Supplementary groups are always cleared.** `extra_groups=[]` in `shim.py`
   is the correct fix. Do not set the target user's supplementary groups -
   privleap actions are not expected to inherit them. A future
