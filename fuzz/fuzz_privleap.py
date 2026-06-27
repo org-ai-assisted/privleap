@@ -73,10 +73,15 @@ def _fields_ok(msg: object) -> bool:
         )
     if name == "ACCESS_CHECK":
         names = msg.signal_name_list  # type: ignore[attr-defined]
+        ## Fail closed if the field is not the expected list of strings, so a
+        ## single string cannot pass by validating each character separately.
+        if not isinstance(names, list):
+            return False
         if not 1 <= len(names) <= 63:
             return False
         return all(
-            PrivleapCommon.validate_id(n, PrivleapValidateType.SIGNAL_NAME)
+            isinstance(n, str)
+            and PrivleapCommon.validate_id(n, PrivleapValidateType.SIGNAL_NAME)
             for n in names
         )
     ## TERMINATE / RELOAD carry no fields; fail closed for anything unexpected.
@@ -96,9 +101,12 @@ def _drive(raw: bytes, control: bool) -> None:
                 user_name=None if control else _USER,
                 is_control_session=control,
             )
-        except Exception:  # pylint: disable=broad-exception-caught
-            ## Session setup should not fail for a real user; not a parser bug.
-            return
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            ## Session construction does not depend on the fuzz input, so a
+            ## failure here is a broken harness/environment, not a parser
+            ## finding. Fail loudly rather than silently turning every input
+            ## into a no-op that still reports "no crashes".
+            raise RuntimeError("PrivleapSession setup failed") from exc
 
         try:
             cli.sendall(raw)
@@ -136,7 +144,18 @@ def TestOneInput(data: bytes) -> None:  # noqa: N802 (Atheris contract name)
 
     fdp = atheris.FuzzedDataProvider(data)
     control: bool = fdp.ConsumeBool()
-    raw: bytes = fdp.ConsumeBytes(fdp.remaining_bytes())
+    well_framed: bool = fdp.ConsumeBool()
+    body: bytes = fdp.ConsumeBytes(fdp.remaining_bytes())
+    if well_framed:
+        ## Prepend a correct length so the input always clears the framing /
+        ## 4096-byte cap in __recv_msg_cautious and reaches the message
+        ## tokenizer; the fuzzer then explores the body (type, arg count,
+        ## arguments). Without this, random first-4-bytes are almost always a
+        ## huge length that is rejected before the parser ever runs.
+        raw: bytes = len(body).to_bytes(4, "big") + body
+    else:
+        ## Leave the bytes raw to also fuzz the length-prefix / framing path.
+        raw = body
     _drive(raw, control)
 
 
