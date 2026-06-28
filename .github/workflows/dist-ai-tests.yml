@@ -48,6 +48,12 @@ jobs:
 
       - name: Checkout dist-ai harnesses
         ## The harnesses live in the dist-ai package, not in this repo.
+        ## Same-owner (org-ai-assisted) repo -> referenced by branch @master,
+        ## NOT a commit SHA: single-source-of-truth propagation, no version
+        ## churn. This is the documented first-party policy, see developer-
+        ## meta-files agents/github-actions.md G-A-004 and the "sha_pinning_
+        ## required intentionally OFF" section. (The actions/checkout pin above
+        ## is third-party, so it stays SHA-pinned with a version comment.)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           repository: org-ai-assisted/dist-ai
