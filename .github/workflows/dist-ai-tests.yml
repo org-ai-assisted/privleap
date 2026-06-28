@@ -1,0 +1,79 @@
+## Copyright (C) 2026 - 2026 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
+## See the file COPYING for copying conditions.
+
+## AI-Assisted
+
+## Minimal CI. The privleap fuzz / property / e2e harnesses are NOT kept in
+## this repo; they live in the dist-ai test-tooling package
+## (org-ai-assisted/dist-ai, usr/share/privleap-tests). This workflow just
+## checks out dist-ai and runs the no-privilege harnesses against the PR's
+## privleap code via PRIVLEAP_REPO: the in-process parser fuzzer, the
+## authorization-engine property test, the Hypothesis property tests, and a
+## short Atheris coverage-guided fuzz run. The sudo / mount-namespace e2e and
+## session-fuzz harnesses are not run here (they need privileges); run those
+## locally from dist-ai.
+
+name: Tests
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'usr/lib/python3/dist-packages/**/*.py'
+      - '.github/workflows/dist-ai-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  privleap-tests:
+    name: dist-ai harnesses (in-process + property + short fuzz)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout privleap (PR)
+        ## https://github.com/actions/checkout/releases/tag/v6.0.2
+        ## > de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: privleap
+          persist-credentials: false
+
+      - name: Checkout dist-ai harnesses
+        ## The harnesses live in the dist-ai package, not in this repo.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: org-ai-assisted/dist-ai
+          ref: master
+          path: dist-ai
+          persist-credentials: false
+
+      - name: Install test dependencies
+        ## pytest + hypothesis power the property layer; atheris is best-effort
+        ## (the harness skips cleanly if it is unavailable on the runner).
+        run: |
+          python3 -m pip install --upgrade pytest hypothesis
+          python3 -m pip install atheris \
+            || echo "atheris unavailable; coverage-guided fuzz will be skipped"
+
+      - name: In-process + Hypothesis property tests
+        env:
+          PRIVLEAP_REPO: ${{ github.workspace }}/privleap
+        run: bash dist-ai/usr/bin/privleap-tests
+
+      - name: Short coverage-guided fuzz (Atheris)
+        env:
+          PRIVLEAP_REPO: ${{ github.workspace }}/privleap
+        run: |
+          if python3 -c 'import atheris' 2>/dev/null; then
+            bash dist-ai/usr/bin/privleap-tests-fuzz-atheris -max_total_time=60
+          else
+            echo "atheris not available on this runner; skipping fuzz step"
+          fi
