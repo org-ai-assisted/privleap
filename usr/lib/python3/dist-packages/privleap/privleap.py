@@ -17,6 +17,7 @@ privleap.py - Backend library for privleap clients and servers.
 import socket
 import os
 import stat
+import sys
 import pwd
 import grp
 import re
@@ -1111,6 +1112,18 @@ class PrivleapSocket:
         self.backend_socket.close()
 
 
+class PrivleapActionTargetMissingError(ValueError):
+    """A configured action's TargetUser/TargetGroup does not exist.
+
+    The action can never run (privleapd could not switch to the missing
+    identity), so the config parser skips just that action rather than failing
+    the entire config load. This mirrors how a nonexistent AuthorizedGroup is
+    tolerated (skipped) instead of aborting, and keeps privleapd usable on
+    installs that omit an optional component -- e.g. a Kicksecure system without
+    tor, where systemcheck's tor actions reference the absent 'debian-tor'.
+    """
+
+
 class PrivleapAction:
     """
     A single action defined by privleap's configuration.
@@ -1187,7 +1200,7 @@ class PrivleapAction:
             orig_target_user: str = target_user
             target_user = PrivleapCommon.normalize_user_id(target_user)
             if target_user is None:
-                raise ValueError(
+                raise PrivleapActionTargetMissingError(
                     f"Account '{orig_target_user}' specified by field "
                     f"'TargetUser' of action '{action_name}' does not "
                     "exist!"
@@ -1197,7 +1210,7 @@ class PrivleapAction:
             orig_target_group: str = target_group
             target_group = PrivleapCommon.normalize_group_id(target_group)
             if target_group is None:
-                raise ValueError(
+                raise PrivleapActionTargetMissingError(
                     f"Group '{orig_target_group}' specified by field "
                     f"'TargetGroup' of action '{action_name}' does not "
                     "exist!"
@@ -1207,6 +1220,40 @@ class PrivleapAction:
         self.action_command = action_command
         self.target_user = target_user
         self.target_group = target_group
+
+    @staticmethod
+    def append_if_runnable(
+        action_output_list: "list[PrivleapAction]",
+        action_name: str | None,
+        action_command: str | None,
+        auth_users: list[str],
+        auth_groups: list[str],
+        target_user: str | None,
+        target_group: str | None,
+    ) -> None:
+        """Build the action and append it, or skip it if its target identity is
+        missing.
+
+        An action whose TargetUser/TargetGroup does not exist can never run, so
+        a missing target is not a fatal config error: warn and drop just that
+        action, leaving the rest of the config -- and privleapd itself -- usable.
+        """
+        try:
+            action_output_list.append(
+                PrivleapAction(
+                    action_name,
+                    action_command,
+                    auth_users,
+                    auth_groups,
+                    target_user,
+                    target_group,
+                )
+            )
+        except PrivleapActionTargetMissingError as skip_reason:
+            print(
+                f"privleap: skipping unusable action: {skip_reason}",
+                file=sys.stderr,
+            )
 
 
 ConfigData: TypeAlias = Tuple[
@@ -1374,15 +1421,14 @@ class PrivleapCommon:
                                     "No authorized users or groups for "
                                     "action:",
                                 )
-                            action_output_list.append(
-                                PrivleapAction(
-                                    current_action_name,
-                                    current_action_command,
-                                    current_auth_users,
-                                    current_auth_groups,
-                                    current_target_user,
-                                    current_target_group,
-                                )
+                            PrivleapAction.append_if_runnable(
+                                action_output_list,
+                                current_action_name,
+                                current_action_command,
+                                current_auth_users,
+                                current_auth_groups,
+                                current_target_user,
+                                current_target_group,
                             )
                             # We don't need to nullify current_action_name since
                             # we set its value below.
@@ -1584,15 +1630,14 @@ class PrivleapCommon:
                     current_action_name,
                     "No authorized users or groups for action:",
                 )
-            action_output_list.append(
-                PrivleapAction(
-                    current_action_name,
-                    current_action_command,
-                    current_auth_users,
-                    current_auth_groups,
-                    current_target_user,
-                    current_target_group,
-                )
+            PrivleapAction.append_if_runnable(
+                action_output_list,
+                current_action_name,
+                current_action_command,
+                current_auth_users,
+                current_auth_groups,
+                current_target_user,
+                current_target_group,
             )
 
         return (
