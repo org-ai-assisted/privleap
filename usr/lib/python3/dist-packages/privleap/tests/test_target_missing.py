@@ -43,6 +43,11 @@ class TargetMissingSkipTest(unittest.TestCase):
         )
         self.assertEqual(actions, [])
 
+    def test_init_raises_dedicated_error_on_missing_target_group(self) -> None:
+        ## Symmetric to the TargetUser path: a valid user but a bogus group.
+        with self.assertRaises(PrivleapActionTargetMissingError):
+            PrivleapAction("act", "/bin/true", ["root"], [], "root", BOGUS)
+
     def test_append_if_runnable_keeps_valid_target(self) -> None:
         actions: list = []
         PrivleapAction.append_if_runnable(
@@ -50,6 +55,20 @@ class TargetMissingSkipTest(unittest.TestCase):
         )
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].action_name, "act")
+
+    def test_append_if_runnable_does_not_swallow_real_valueerror(self) -> None:
+        ## Invariant: the skip path must catch ONLY the missing-target subclass,
+        ## never widen to bare ValueError. A genuine config error (here: empty
+        ## command) must still propagate, not be silently dropped.
+        actions: list = []
+        with self.assertRaises(ValueError) as caught:
+            PrivleapAction.append_if_runnable(
+                actions, "act", None, ["root"], [], "root", None
+            )
+        self.assertNotIsInstance(
+            caught.exception, PrivleapActionTargetMissingError
+        )
+        self.assertEqual(actions, [])
 
     @unittest.skipUnless(
         os.geteuid() == 0,
@@ -73,6 +92,9 @@ class TargetMissingSkipTest(unittest.TestCase):
             handle.write(config)
             path = Path(handle.name)
         try:
+            ## parse_config_file requires the file be root:root-owned; as root
+            ## the egid may not be 0, so set it explicitly rather than rely on it.
+            os.chown(path, 0, 0)
             result = PrivleapCommon.parse_config_file(path)
         finally:
             path.unlink()
