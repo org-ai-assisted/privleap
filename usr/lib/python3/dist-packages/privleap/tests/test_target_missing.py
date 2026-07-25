@@ -37,7 +37,7 @@ class TargetMissingSkipTest(unittest.TestCase):
             PrivleapAction("act", "/bin/true", ["root"], [], BOGUS, None)
 
     def test_append_if_runnable_skips_missing_target(self) -> None:
-        actions: list = []
+        actions: list[PrivleapAction] = []
         PrivleapAction.append_if_runnable(
             actions, "act", "/bin/true", ["root"], [], BOGUS, None
         )
@@ -49,7 +49,7 @@ class TargetMissingSkipTest(unittest.TestCase):
             PrivleapAction("act", "/bin/true", ["root"], [], "root", BOGUS)
 
     def test_append_if_runnable_keeps_valid_target(self) -> None:
-        actions: list = []
+        actions: list[PrivleapAction] = []
         PrivleapAction.append_if_runnable(
             actions, "act", "/bin/true", ["root"], [], "root", None
         )
@@ -60,7 +60,7 @@ class TargetMissingSkipTest(unittest.TestCase):
         ## Invariant: the skip path must catch ONLY the missing-target subclass,
         ## never widen to bare ValueError. A genuine config error (here: empty
         ## command) must still propagate, not be silently dropped.
-        actions: list = []
+        actions: list[PrivleapAction] = []
         with self.assertRaises(ValueError) as caught:
             PrivleapAction.append_if_runnable(
                 actions, "act", None, ["root"], [], "root", None
@@ -100,6 +100,7 @@ class TargetMissingSkipTest(unittest.TestCase):
             path.unlink()
         ## A fatal parse error returns a str; success returns a ConfigData tuple.
         self.assertNotIsInstance(result, str)
+        assert not isinstance(result, str)  # narrow for mypy
         action_names = [action.action_name for action in result[0]]
         self.assertIn("valid-act", action_names)
         self.assertNotIn("tor-act", action_names)
