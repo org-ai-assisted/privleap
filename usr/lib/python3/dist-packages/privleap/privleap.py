@@ -17,7 +17,7 @@ privleap.py - Backend library for privleap clients and servers.
 import socket
 import os
 import stat
-import sys
+import logging
 import pwd
 import grp
 import re
@@ -1250,10 +1250,11 @@ class PrivleapAction:
                 )
             )
         except PrivleapActionTargetMissingError as skip_reason:
-            print(
-                f"privleap: skipping unusable action: {skip_reason}",
-                file=sys.stderr,
-            )
+            ## logging (not print) so 'privleapd --check-config' can silence it by
+            ## raising the log level: a skipped missing-target action is expected on
+            ## installs that omit a component (e.g. no tor -> no 'debian-tor'), not a
+            ## config error, so a valid config must still check out silent.
+            logging.warning("skipping unusable action: %s", skip_reason)
 
 
 ConfigData: TypeAlias = Tuple[

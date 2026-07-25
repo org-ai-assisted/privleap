@@ -1786,6 +1786,12 @@ def main() -> NoReturn:
             sys.exit(1)
 
     if PrivleapdGlobal.check_config_mode:
+        ## Only report real config problems: a valid config must produce no output
+        ## (systemcheck's 'privleapd --check-config' check treats any output as a
+        ## misconfiguration). Skipped missing-target actions log at WARNING, which
+        ## is expected, not an error -- suppress it here while still surfacing
+        ## ERROR/CRITICAL parse failures.
+        logging.getLogger().setLevel(logging.ERROR)
         if not parse_config_files():
             sys.exit(1)
         sys.exit(0)
