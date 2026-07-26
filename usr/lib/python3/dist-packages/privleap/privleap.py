@@ -1250,11 +1250,13 @@ class PrivleapAction:
                 )
             )
         except PrivleapActionTargetMissingError as skip_reason:
-            ## logging (not print) so 'privleapd --check-config' can silence it by
-            ## raising the log level: a skipped missing-target action is expected on
+            ## INFO, not WARNING: a skipped missing-target action is EXPECTED on
             ## installs that omit a component (e.g. no tor -> no 'debian-tor'), not a
-            ## config error, so a valid config must still check out silent.
-            logging.warning("skipping unusable action: %s", skip_reason)
+            ## problem. WARNING would both make 'privleapd --check-config' non-silent
+            ## AND trip systemcheck's check_journal (it greps the journal for 'warn').
+            ## INFO keeps it in the daemon journal for debugging while --check-config
+            ## (log level raised to ERROR) and check_journal both ignore it.
+            logging.info("skipping unusable action: %s", skip_reason)
 
 
 ConfigData: TypeAlias = Tuple[
