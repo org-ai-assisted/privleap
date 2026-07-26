@@ -1782,6 +1782,14 @@ def main() -> NoReturn:
             sys.exit(1)
 
     if PrivleapdGlobal.check_config_mode:
+        # --check-config must be silent on a VALID config (callers such as
+        # systemcheck treat any output as a misconfiguration). An action whose
+        # TargetUser/TargetGroup is absent is ignored, not an error (expected on
+        # installs that omit a component, e.g. no tor -> no 'debian-tor'), and it
+        # is logged at WARNING; raise the threshold to ERROR here so only genuine
+        # config errors are reported while parse_config_files() still returns
+        # False on them.
+        logging.getLogger().setLevel(logging.ERROR)
         if not parse_config_files():
             sys.exit(1)
         sys.exit(0)
