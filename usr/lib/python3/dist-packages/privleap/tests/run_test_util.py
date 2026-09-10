@@ -1,4 +1,4 @@
-#!/usr/bin/python3 -su
+#!/usr/bin/python3 -Bsu
 
 ## Copyright (C) 2025 - 2026 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 ## See the file COPYING for copying conditions.
@@ -324,7 +324,12 @@ def stop_privleapd_subprocess() -> None:
 
     assert PlTestGlobal.privleapd_proc is not None
     try:
-        PlTestGlobal.privleapd_proc.kill()
+        if os.environ.get("PRIVLEAP_COVERAGE"):
+            # Coverage's SIGTERM handler flushes the daemon's data; SIGKILL
+            # would bypass it and lose privleapd.py's coverage entirely.
+            PlTestGlobal.privleapd_proc.terminate()
+        else:
+            PlTestGlobal.privleapd_proc.kill()
         _ = PlTestGlobal.privleapd_proc.communicate()
     except Exception as e:
         logging.critical("Could not kill privleapd!", exc_info=e)

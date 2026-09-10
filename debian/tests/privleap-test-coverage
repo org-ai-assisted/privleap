@@ -1,0 +1,46 @@
+#!/bin/bash
+
+## Copyright (C) 2026 - 2026 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
+## See the file COPYING for copying conditions.
+
+## Runs the privleap regression suite under coverage.py and reports how much of
+## the privleap Python code (the privleap package plus the shim) the suite
+## reaches. Every privleap process joins the measurement via
+## debian/tests/coverage/sitecustomize.py; see debian/tests/coverage/coveragerc.
+##
+## Run only this test against a built package with:
+##   autopkgtest --test-name=privleap-test-coverage -B privleap*.deb . -- unshare
+
+set -o errexit
+set -o nounset
+set -o pipefail
+set -o errtrace
+shopt -s inherit_errexit
+shopt -s shift_verbose
+export LC_ALL=C
+
+repo_dir="$(pwd)"
+rcfile="${repo_dir}/debian/tests/coverage/coveragerc"
+
+artifacts_dir="${AUTOPKGTEST_ARTIFACTS:-${repo_dir}/autopkgtest-artifacts}"
+cov_dir="${artifacts_dir}/privleap-coverage"
+mkdir -p "${cov_dir}"
+## World-writable so any privleap process (whatever user it runs as) can drop
+## its parallel data file here.
+chmod 0777 "${cov_dir}"
+
+export COVERAGE_PROCESS_START="${rcfile}"
+export COVERAGE_FILE="${cov_dir}/.coverage"
+export PYTHONPATH="${repo_dir}/debian/tests/coverage${PYTHONPATH:+:${PYTHONPATH}}"
+## Tells run_test_util to stop privleapd with SIGTERM (catchable, so coverage
+## flushes) rather than SIGKILL.
+export PRIVLEAP_COVERAGE=1
+
+test_rc=0
+./test/run-test --no-service-handling || test_rc="$?"
+
+python3 -m coverage combine --rcfile="${rcfile}" "${cov_dir}"
+python3 -m coverage report --rcfile="${rcfile}" 1>&2
+python3 -m coverage xml --rcfile="${rcfile}" -o "${cov_dir}/coverage.xml"
+
+exit "${test_rc}"
