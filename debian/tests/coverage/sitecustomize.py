@@ -29,4 +29,7 @@ if os.environ.get("COVERAGE_PROCESS_START"):
 
         coverage.process_startup()
     except Exception:
+        # Coverage is optional test-only scaffolding: a failure to start it
+        # (coverage absent, or process_startup erroring) must never break the
+        # process being measured, least of all the privileged daemon.
         pass

@@ -1483,12 +1483,10 @@ def leaprun_filter_env_var_test_stdout(
                 stdout_part.startswith(b"AUTOPKGTEST_TESTBED_ARCH="),
                 stdout_part.startswith(b"AUTOPKGTEST_TEST_ARCH="),
                 stdout_part.startswith(b"DEB_BUILD_OPTIONS="),
-                # Scaffolding injected only by the privleap-test-coverage
-                # test; absent in a normal run.
+                # coverage.py scaffolding the test harness injects.
                 stdout_part.startswith(b"COVERAGE_PROCESS_START="),
                 stdout_part.startswith(b"COVERAGE_FILE="),
                 stdout_part.startswith(b"PYTHONPATH="),
-                stdout_part.startswith(b"PRIVLEAP_COVERAGE="),
             ]
         ):
             continue
