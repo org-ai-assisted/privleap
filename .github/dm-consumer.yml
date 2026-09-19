@@ -8,4 +8,12 @@
 dist-ai-tests:
   ## python3-pam: shim.py imports PAM at module scope, so without it the
   ## shim dies at import and its refusal paths cannot be tested at all.
-  apt-packages: "python3 python3-pytest python3-hypothesis python3-sdnotify python3-pam"
+  ## python3-z3: the argument-count-codec formal-verification core suite
+  ## (privleap-tests-verify) hard-FAILs without Z3 (it must not silently
+  ## disable itself).
+  apt-packages: "python3 python3-pytest python3-hypothesis python3-sdnotify python3-pam python3-z3"
+  ## Runs in its own workflow (session-fuzz.yml).
+  skip: [privleap-tests-session-fuzz]
+  ## privleap-tests-fuzz-atheris needs the atheris pip package (not packaged
+  ## for Debian); coverage-guided fuzzing runs continuously via ClusterFuzzLite.
+  allow-skip: [privleap-tests-fuzz-atheris]
