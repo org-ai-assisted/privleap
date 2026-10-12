@@ -123,6 +123,19 @@ target_cwd: str = target_user_info.pw_dir
 if not Path(target_cwd).is_dir():
     target_cwd = "/"
 
+## Run the action with the TARGET user's OWN supplementary groups (initgroups
+## semantics, as sudo/runuser/login do). An action running as e.g. 'systemcheck'
+## must have that user's groups (systemd-journal to read the journal, debian-tor,
+## ...), or the action silently loses access (journalctl exits 1 "No journal files
+## were opened due to insufficient permissions"). getgrouplist yields exactly the
+## target's groups: it does NOT leave privleapd's (root's) supplementary groups in
+## place (the Popen default when extra_groups is unset), and does NOT strip the
+## target's own access (an empty list would). Seeded with the resolved target gid so
+## an explicit TargetGroup is included alongside the user's memberships.
+target_extra_groups: list[int] = os.getgrouplist(
+    target_user_info.pw_name, target_group_gid
+)
+
 try:
     # pylint: disable=consider-using-with
     # Rationale:
@@ -132,7 +145,7 @@ try:
         stdin=subprocess.DEVNULL,
         user=target_user_uid,
         group=target_group_gid,
-        extra_groups=[],
+        extra_groups=target_extra_groups,
         env=action_env,
         cwd=target_cwd,
     )
