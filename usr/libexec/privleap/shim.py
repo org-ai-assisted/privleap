@@ -73,9 +73,9 @@ try:
     ## exits 1 "No journal files were opened due to insufficient permissions").
     ## Seed getgrouplist with the user's PASSWD gid, not target_group_gid: the
     ## seed is the one gid getgrouplist adds unconditionally, so seeding with the
-    ## passwd gid keeps the user's own primary group even when TargetGroup
-    ## overrides the process primary to a different gid. Then add the explicit
-    ## TargetGroup so it is present alongside the user's memberships. This leaks
+    ## passwd gid keeps the user's own primary group in the set even when
+    ## TargetGroup sets the process primary (group= below) to a different gid --
+    ## that TargetGroup gid becomes the egid and needs no entry here. This leaks
     ## none of privleapd's (root's) groups (the Popen default when extra_groups
     ## is unset) and strips none of the target's access (an empty list would).
     ## Computed here, inside the exit-255 guard and BEFORE the PAM session opens,
@@ -84,8 +84,6 @@ try:
     target_extra_groups: list[int] = os.getgrouplist(
         target_user_info.pw_name, target_user_info.pw_gid
     )
-    if target_group_gid not in target_extra_groups:
-        target_extra_groups.append(target_group_gid)
 except Exception:
     sys.exit(255)
 
