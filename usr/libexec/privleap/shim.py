@@ -66,24 +66,6 @@ try:
     calling_user_info: pwd.struct_passwd = pwd.getpwuid(calling_user_uid)
     target_user_info: pwd.struct_passwd = pwd.getpwuid(target_user_uid)
     target_group_info = grp.getgrgid(target_group_gid)
-    ## Run the action with the TARGET user's OWN supplementary groups
-    ## (initgroups semantics, as sudo/runuser/login do). An action running as
-    ## e.g. 'systemcheck' must have that user's groups (systemd-journal to read
-    ## the journal, debian-tor, ...), or it silently loses access (journalctl
-    ## exits 1 "No journal files were opened due to insufficient permissions").
-    ## Seed getgrouplist with the user's PASSWD gid, not target_group_gid: the
-    ## seed is the one gid getgrouplist adds unconditionally, so seeding with the
-    ## passwd gid keeps the user's own primary group in the set even when
-    ## TargetGroup sets the process primary (group= below) to a different gid --
-    ## that TargetGroup gid becomes the egid and needs no entry here. This leaks
-    ## none of privleapd's (root's) groups (the Popen default when extra_groups
-    ## is unset) and strips none of the target's access (an empty list would).
-    ## Computed here, inside the exit-255 guard and BEFORE the PAM session opens,
-    ## so a pathological (e.g. non-UTF-8) target name fails cleanly, not with an
-    ## uncaught traceback that skips PAM teardown.
-    target_extra_groups: list[int] = os.getgrouplist(
-        target_user_info.pw_name, target_user_info.pw_gid
-    )
 except Exception:
     sys.exit(255)
 
@@ -150,7 +132,7 @@ try:
         stdin=subprocess.DEVNULL,
         user=target_user_uid,
         group=target_group_gid,
-        extra_groups=target_extra_groups,
+        extra_groups=[],
         env=action_env,
         cwd=target_cwd,
     )

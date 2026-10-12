@@ -17,19 +17,10 @@ changes that have already been evaluated and resolved.
 - **PAM environment variables are trusted.** Do not add env-var whitelisting in
   `shim.py`. If `pam_env.so` passes something through, that is the system
   administrator's decision.
-- **An action runs with the TARGET user's OWN supplementary groups.** `shim.py`
-  computes them with `os.getgrouplist(target_user, target_user_pw_gid)` and
-  passes them as `extra_groups` (initgroups semantics, as sudo/runuser/login
-  do). An action running as e.g. `systemcheck` must keep that user's groups
-  (`systemd-journal` to read the journal, ...), or it silently loses access
-  (journalctl exits 1 "No journal files were opened due to insufficient
-  permissions"). This does NOT inherit privleapd's (root's) supplementary
-  groups - that is the `Popen` default when `extra_groups` is unset, which
-  `extra_groups=[]` was introduced to avoid; an explicit list of the target's
-  OWN groups avoids the root leak without also stripping the target's access.
-  Seed `getgrouplist` with the passwd gid (not the resolved `TargetGroup` gid)
-  so the user's primary group survives when `TargetGroup` sets a different
-  process primary.
+- **Supplementary groups are always cleared.** `extra_groups=[]` in `shim.py`
+  is the correct fix. Do not set the target user's supplementary groups -
+  privleap actions are not expected to inherit them. A future
+  `EnableSupplementaryGroups` config key could change this if needed.
 - **No per-connection DoS rate limiting.** Each comm session runs in its own
   thread; rate limiting adds complexity without meaningful protection.
 
