@@ -66,6 +66,26 @@ try:
     calling_user_info: pwd.struct_passwd = pwd.getpwuid(calling_user_uid)
     target_user_info: pwd.struct_passwd = pwd.getpwuid(target_user_uid)
     target_group_info = grp.getgrgid(target_group_gid)
+    ## Run the action with the TARGET user's OWN supplementary groups
+    ## (initgroups semantics, as sudo/runuser/login do). An action running as
+    ## e.g. 'systemcheck' must have that user's groups (systemd-journal to read
+    ## the journal, debian-tor, ...), or it silently loses access (journalctl
+    ## exits 1 "No journal files were opened due to insufficient permissions").
+    ## Seed getgrouplist with the user's PASSWD gid, not target_group_gid: the
+    ## seed is the one gid getgrouplist adds unconditionally, so seeding with the
+    ## passwd gid keeps the user's own primary group even when TargetGroup
+    ## overrides the process primary to a different gid. Then add the explicit
+    ## TargetGroup so it is present alongside the user's memberships. This leaks
+    ## none of privleapd's (root's) groups (the Popen default when extra_groups
+    ## is unset) and strips none of the target's access (an empty list would).
+    ## Computed here, inside the exit-255 guard and BEFORE the PAM session opens,
+    ## so a pathological (e.g. non-UTF-8) target name fails cleanly, not with an
+    ## uncaught traceback that skips PAM teardown.
+    target_extra_groups: list[int] = os.getgrouplist(
+        target_user_info.pw_name, target_user_info.pw_gid
+    )
+    if target_group_gid not in target_extra_groups:
+        target_extra_groups.append(target_group_gid)
 except Exception:
     sys.exit(255)
 
@@ -122,19 +142,6 @@ for env_var in pam_env_list:
 target_cwd: str = target_user_info.pw_dir
 if not Path(target_cwd).is_dir():
     target_cwd = "/"
-
-## Run the action with the TARGET user's OWN supplementary groups (initgroups
-## semantics, as sudo/runuser/login do). An action running as e.g. 'systemcheck'
-## must have that user's groups (systemd-journal to read the journal, debian-tor,
-## ...), or the action silently loses access (journalctl exits 1 "No journal files
-## were opened due to insufficient permissions"). getgrouplist yields exactly the
-## target's groups: it does NOT leave privleapd's (root's) supplementary groups in
-## place (the Popen default when extra_groups is unset), and does NOT strip the
-## target's own access (an empty list would). Seeded with the resolved target gid so
-## an explicit TargetGroup is included alongside the user's memberships.
-target_extra_groups: list[int] = os.getgrouplist(
-    target_user_info.pw_name, target_group_gid
-)
 
 try:
     # pylint: disable=consider-using-with
