@@ -107,10 +107,6 @@ run_autopkgtest() {
     test_component="${1:-}"
   fi
 
-  if [ "${delete_old_tarball}" = 'true' ]; then
-    safe-rm -f -- "${autopkgtest_tarball_path}"
-  fi
-
   ## Dependency checks
   if ! [ -x '/usr/bin/unshare' ]; then
     1>&2 echo 'unshare is not executable or does not exist!'
@@ -170,6 +166,11 @@ run_autopkgtest() {
   clean_test_artifacts
   if [ "${stop_after_clean}" = 'true' ]; then
     exit 0
+  fi
+
+  ## After the dependency checks, so safe-rm is guaranteed present.
+  if [ "${delete_old_tarball}" = 'true' ]; then
+    safe-rm -f -- "${autopkgtest_tarball_path}"
   fi
 
   if ! [ -f "${autopkgtest_tarball_path}" ]; then
