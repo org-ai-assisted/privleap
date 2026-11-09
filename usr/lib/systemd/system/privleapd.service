@@ -20,30 +20,31 @@ ExecReload=/usr/bin/leapctl --reload
 WatchdogSec=10s
 Restart=always
 
-## W^X hardening (anonymous executable memory): MemoryDenyWriteExecute denies
-## writable+executable anonymous mappings and any mmap/mprotect gaining
-## PROT_EXEC; SystemCallFilter=~memfd_create blocks the anonymous memfd
-## exec-bypass (the call is SIGSYS-killed). NoNewPrivileges stays FALSE on
-## purpose: privleapd is root and escalates admin-defined actions
-## (shim.py -> Popen) that may exec SUID helpers or otherwise gain privilege --
-## the seccomp filter still installs via the root executor's CAP_SYS_ADMIN. That
-## filter INHERITS into the escalated actions, so W^X covers them too (by design;
-## none of the curated actions JIT). File-backed exec mappings are out of MDWE's
-## scope (the AppArmor layer's job). privleapd and its deps never JIT (no ctypes
-## callbacks / cffi / JIT).
+## W^X hardening (Layer 1 anonymous + Layer 2 file-backed exec).
+## - MemoryDenyWriteExecute: deny anonymous W+X mappings and mprotect/shmat that
+##   gain PROT_EXEC.
+## - SystemCallArchitectures=native: close the secondary-ABI (i386 ipc/mmap2)
+##   bypass of MDWE's seccomp fallback.
+## - LockPersonality: block the READ_IMPLIES_EXEC personality bypass.
+## - SystemCallFilter=~memfd_create: kill the anonymous memfd exec-bypass (SIGSYS).
+## - NoExecPaths: mark the writable dirs non-executable, closing the file-backed
+##   mmap(PROT_READ|PROT_EXEC) vector MDWE does not cover (no apparmor profile
+##   needed, independent of the remount-secure noexec toggle). It lists the
+##   /run,/tmp,/dev/shm PARENTS (not /run/privleapd) because privleapd
+##   rmtree+recreates its own state subdir at startup; a per-dir mount breaks that.
+## NoNewPrivileges stays FALSE: privleapd escalates admin actions (shim.py ->
+## Popen) that may gain privilege; the seccomp still installs via the root
+## executor's CAP_SYS_ADMIN. All of the above INHERIT into the escalated actions
+## by design -- W^X covers them too. CAVEAT: SystemCallArchitectures=native and
+## LockPersonality inherit as well, so a 32-bit admin-action binary or one that
+## sets a READ_IMPLIES_EXEC personality would be REFUSED. None exist on modern
+## amd64 Kicksecure; such a case fails loud (accepted, like the MDWE inheritance).
 MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+LockPersonality=true
 SystemCallFilter=~memfd_create
 NoNewPrivileges=false
-
-## W^X Layer 2 (file-backed exec): privleapd's writable runtime state lives under
-## /run (/run/privleapd). NoExecPaths marks /run non-executable in the unit mount
-## namespace, closing the file-backed exec-mapping vector MDWE does not cover --
-## per-daemon, no apparmor profile, independent of the remount-secure noexec
-## toggle. /run holds sockets/state, never executables (the daemon and its
-## escalated actions exec from /usr), and privleapd still rmtree+recreates its own
-## /run/privleapd subdir normally -- NoExecPaths on the /run parent (not on
-## /run/privleapd itself) avoids making that subdir a mount point.
-NoExecPaths=/run
+NoExecPaths=/run /tmp /var/tmp /dev/shm
 
 [Install]
 WantedBy=multi-user.target
