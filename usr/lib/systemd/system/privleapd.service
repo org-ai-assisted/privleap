@@ -26,7 +26,8 @@ Restart=always
 ## - SystemCallArchitectures=native: close the secondary-ABI (i386 ipc/mmap2)
 ##   bypass of MDWE's seccomp fallback.
 ## - LockPersonality: block the READ_IMPLIES_EXEC personality bypass.
-## - SystemCallFilter=~memfd_create: kill the anonymous memfd exec-bypass (SIGSYS).
+## - SystemCallFilter=~memfd_create: deny the anonymous memfd exec-bypass
+##   (returns EPERM, see SystemCallErrorNumber below).
 ## - NoExecPaths: mark the common writable scratch dirs (/run,/tmp,/var/tmp,
 ##   /dev/shm,/dev -- /dev is rw+exec devtmpfs for root) non-executable, raising the bar on the file-backed
 ##   mmap(PROT_READ|PROT_EXEC) vector MDWE does not cover. PARTIAL for this ROOT
@@ -35,18 +36,28 @@ Restart=always
 ##   dedicated AppArmor profile (out of scope here). It lists the /run,/tmp,...
 ##   PARENTS (not /run/privleapd) because privleapd rmtree+recreates its own state
 ##   subdir at startup; a per-dir mount breaks that.
-## NoNewPrivileges stays FALSE: privleapd escalates admin actions (shim.py ->
-## Popen) that may gain privilege; the seccomp still installs via the root
-## executor's CAP_SYS_ADMIN. All of the above INHERIT into the escalated actions
-## by design -- W^X covers them too. CAVEAT: SystemCallArchitectures=native and
-## LockPersonality inherit as well, so a 32-bit admin-action binary or one that
-## sets a READ_IMPLIES_EXEC personality would be REFUSED. None exist on modern
-## amd64 Kicksecure; such a case fails loud (accepted, like the MDWE inheritance).
+## NoNewPrivileges=yes: systemd forces PR_SET_NO_NEW_PRIVS=1 whenever MDWE or
+## SystemCallFilter= is set, so it CANNOT be false here -- set it yes to match
+## the enforced reality (verified: NoNewPrivs=1 even with NoNewPrivileges=no).
+## privleapd escalates by dropping from root via shim.py (Popen user=), which
+## NNP=1 does not impede; a spawned action simply cannot RE-gain privilege via a
+## SUID/setcap execve.
+## - SystemCallErrorNumber=EPERM: a denied syscall returns -EPERM (a catchable
+##   error), NOT the default SIGSYS kill. The W^X bypass is still blocked
+##   (memfd_create cannot create an fd), but an action that calls it fails soft
+##   instead of dying by signal.
+## All of the above INHERIT into the escalated actions (shim.py -> Popen -> bash)
+## by design -- W^X is defense-in-depth on the escalated code too. CAVEAT:
+## SystemCallArchitectures=native and LockPersonality inherit as well, so a
+## 32-bit admin-action binary or one that sets a READ_IMPLIES_EXEC personality
+## is REFUSED. None exist on modern amd64 Kicksecure; such a case fails loud
+## (accepted, like the MDWE inheritance).
 MemoryDenyWriteExecute=true
 SystemCallArchitectures=native
 LockPersonality=true
 SystemCallFilter=~memfd_create
-NoNewPrivileges=false
+SystemCallErrorNumber=EPERM
+NoNewPrivileges=yes
 NoExecPaths=/run /tmp /var/tmp /dev/shm /dev
 
 [Install]
