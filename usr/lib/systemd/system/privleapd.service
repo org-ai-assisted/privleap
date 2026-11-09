@@ -28,7 +28,7 @@ Restart=always
 ## - LockPersonality: block the READ_IMPLIES_EXEC personality bypass.
 ## - SystemCallFilter=~memfd_create: kill the anonymous memfd exec-bypass (SIGSYS).
 ## - NoExecPaths: mark the common writable scratch dirs (/run,/tmp,/var/tmp,
-##   /dev/shm) non-executable, raising the bar on the file-backed
+##   /dev/shm,/dev -- /dev is rw+exec devtmpfs for root) non-executable, raising the bar on the file-backed
 ##   mmap(PROT_READ|PROT_EXEC) vector MDWE does not cover. PARTIAL for this ROOT
 ##   daemon: uid 0 could still exec a file written on another executable fs, or
 ##   clear noexec via mount_setattr -- a COMPLETE file-backed close would need a
@@ -47,7 +47,7 @@ SystemCallArchitectures=native
 LockPersonality=true
 SystemCallFilter=~memfd_create
 NoNewPrivileges=false
-NoExecPaths=/run /tmp /var/tmp /dev/shm
+NoExecPaths=/run /tmp /var/tmp /dev/shm /dev
 
 [Install]
 WantedBy=multi-user.target
