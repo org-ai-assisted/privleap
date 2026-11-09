@@ -35,5 +35,15 @@ MemoryDenyWriteExecute=true
 SystemCallFilter=~memfd_create
 NoNewPrivileges=false
 
+## W^X Layer 2 (file-backed exec): privleapd's writable runtime state lives under
+## /run (/run/privleapd). NoExecPaths marks /run non-executable in the unit mount
+## namespace, closing the file-backed exec-mapping vector MDWE does not cover --
+## per-daemon, no apparmor profile, independent of the remount-secure noexec
+## toggle. /run holds sockets/state, never executables (the daemon and its
+## escalated actions exec from /usr), and privleapd still rmtree+recreates its own
+## /run/privleapd subdir normally -- NoExecPaths on the /run parent (not on
+## /run/privleapd itself) avoids making that subdir a mount point.
+NoExecPaths=/run
+
 [Install]
 WantedBy=multi-user.target
