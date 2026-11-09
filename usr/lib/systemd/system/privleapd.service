@@ -20,5 +20,20 @@ ExecReload=/usr/bin/leapctl --reload
 WatchdogSec=10s
 Restart=always
 
+## W^X hardening (anonymous executable memory): MemoryDenyWriteExecute denies
+## writable+executable anonymous mappings and any mmap/mprotect gaining
+## PROT_EXEC; SystemCallFilter=~memfd_create blocks the anonymous memfd
+## exec-bypass (the call is SIGSYS-killed). NoNewPrivileges stays FALSE on
+## purpose: privleapd is root and escalates admin-defined actions
+## (shim.py -> Popen) that may exec SUID helpers or otherwise gain privilege --
+## the seccomp filter still installs via the root executor's CAP_SYS_ADMIN. That
+## filter INHERITS into the escalated actions, so W^X covers them too (by design;
+## none of the curated actions JIT). File-backed exec mappings are out of MDWE's
+## scope (the AppArmor layer's job). privleapd and its deps never JIT (no ctypes
+## callbacks / cffi / JIT).
+MemoryDenyWriteExecute=true
+SystemCallFilter=~memfd_create
+NoNewPrivileges=false
+
 [Install]
 WantedBy=multi-user.target
