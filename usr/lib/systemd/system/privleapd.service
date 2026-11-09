@@ -27,11 +27,14 @@ Restart=always
 ##   bypass of MDWE's seccomp fallback.
 ## - LockPersonality: block the READ_IMPLIES_EXEC personality bypass.
 ## - SystemCallFilter=~memfd_create: kill the anonymous memfd exec-bypass (SIGSYS).
-## - NoExecPaths: mark the writable dirs non-executable, closing the file-backed
-##   mmap(PROT_READ|PROT_EXEC) vector MDWE does not cover (no apparmor profile
-##   needed, independent of the remount-secure noexec toggle). It lists the
-##   /run,/tmp,/dev/shm PARENTS (not /run/privleapd) because privleapd
-##   rmtree+recreates its own state subdir at startup; a per-dir mount breaks that.
+## - NoExecPaths: mark the common writable scratch dirs (/run,/tmp,/var/tmp,
+##   /dev/shm) non-executable, raising the bar on the file-backed
+##   mmap(PROT_READ|PROT_EXEC) vector MDWE does not cover. PARTIAL for this ROOT
+##   daemon: uid 0 could still exec a file written on another executable fs, or
+##   clear noexec via mount_setattr -- a COMPLETE file-backed close would need a
+##   dedicated AppArmor profile (out of scope here). It lists the /run,/tmp,...
+##   PARENTS (not /run/privleapd) because privleapd rmtree+recreates its own state
+##   subdir at startup; a per-dir mount breaks that.
 ## NoNewPrivileges stays FALSE: privleapd escalates admin actions (shim.py ->
 ## Popen) that may gain privilege; the seccomp still installs via the root
 ## executor's CAP_SYS_ADMIN. All of the above INHERIT into the escalated actions
