@@ -65,7 +65,9 @@ try:
     target_group_gid = int(target_group_gid_str)
     calling_user_info: pwd.struct_passwd = pwd.getpwuid(calling_user_uid)
     target_user_info: pwd.struct_passwd = pwd.getpwuid(target_user_uid)
-    target_group_info = grp.getgrgid(target_group_gid)
+    ## Validate the target group exists (raises on a missing gid, exiting 255);
+    ## Popen takes the numeric gid directly, so the struct itself is unused.
+    grp.getgrgid(target_group_gid)
 except Exception:
     sys.exit(255)
 

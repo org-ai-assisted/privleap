@@ -79,6 +79,7 @@ def proc_try_readline(
         try:
             PlTestGlobal.linebuf += target_stream.read()
         except Exception:
+            ## Non-blocking read may have nothing ready; retry until timeout.
             pass
         if "\n" in PlTestGlobal.linebuf:
             break
@@ -182,10 +183,12 @@ def erase_old_privleap_config() -> None:
     try:
         shutil.rmtree(PlTestGlobal.privleap_deploy_local_conf_dir)
     except FileNotFoundError:
+        ## Dir may not have been created yet; nothing to remove.
         pass
     try:
         shutil.rmtree(PlTestGlobal.privleap_system_local_conf_dir)
     except FileNotFoundError:
+        ## Dir may not have been created yet; nothing to remove.
         pass
 
     PlTestGlobal.privleap_conf_dir.mkdir(parents=True, exist_ok=False)

@@ -3694,6 +3694,8 @@ def privleapd_invalid_ascii_test(test_data: str) -> bool:
         ## wait for the server to fully process the invalid data we've sent it.
         _ = comm_session.get_msg()
     except Exception:
+        ## Expected: the invalid data makes the server drop the connection, so
+        ## this read usually fails; we only needed to wait for it to process.
         pass
     comm_session.close_session()
     if compare_privleapd_stderr(
@@ -3875,6 +3877,7 @@ def privleapd_multithreading_test_monitor() -> None:
         try:
             linebuf += PlTestGlobal.privleapd_proc.stderr.read()
         except Exception:
+            ## Non-blocking stderr read may have nothing ready; retry next loop.
             pass
         time.sleep(0.1)
 
