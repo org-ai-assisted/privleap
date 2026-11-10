@@ -1,4 +1,4 @@
-#!/usr/bin/python3 -su
+#!/usr/bin/python3 -Bsu
 
 ## Copyright (C) 2025 - 2026 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 ## See the file COPYING for copying conditions.
@@ -1401,6 +1401,9 @@ class PrivleapCommon:
                                     )
                                 )
                             except PrivleapTargetIdentMissingError:
+                                ## Target user/group does not exist on this
+                                ## system (already logged); skip registering the
+                                ## un-runnable action rather than failing parse.
                                 pass
                             ## We don't need to nullify current_action_name since
                             ## we set its value below.
@@ -1633,6 +1636,9 @@ class PrivleapCommon:
                     )
                 )
             except PrivleapTargetIdentMissingError:
+                ## Target user/group does not exist on this system (already
+                ## logged); skip registering the un-runnable action rather than
+                ## failing parse.
                 pass
 
         return (

@@ -20,5 +20,47 @@ ExecReload=/usr/bin/leapctl --reload
 WatchdogSec=10s
 Restart=always
 
+## W^X hardening (Layer 1 anonymous + Layer 2 file-backed exec).
+## - MemoryDenyWriteExecute: deny anonymous W+X mappings and mprotect/shmat that
+##   gain PROT_EXEC.
+## - SystemCallArchitectures=native: close the secondary-ABI (i386 ipc/mmap2)
+##   bypass of MDWE's seccomp fallback.
+## - LockPersonality: block the READ_IMPLIES_EXEC personality bypass.
+## - SystemCallFilter=~memfd_create: deny the anonymous memfd exec-bypass
+##   (returns EPERM, see SystemCallErrorNumber below).
+## - NoExecPaths: mark the common writable scratch dirs (/run,/tmp,/var/tmp,
+##   /dev/shm,/dev -- /dev is rw+exec devtmpfs for root) non-executable, raising the bar on the file-backed
+##   mmap(PROT_READ|PROT_EXEC) vector MDWE does not cover. PARTIAL for this ROOT
+##   daemon: uid 0 could still exec a file written on another executable fs, or
+##   clear noexec via mount_setattr -- a COMPLETE file-backed close would need a
+##   dedicated AppArmor profile (out of scope here). It lists the /run,/tmp,...
+##   PARENTS (not /run/privleapd) because privleapd rmtree+recreates its own state
+##   subdir at startup; a per-dir mount breaks that.
+## NoNewPrivileges stays FALSE on purpose, and IS honored here: privleapd runs as
+## root WITH CAP_SYS_ADMIN, so systemd installs the seccomp W^X filter via that
+## capability rather than via PR_SET_NO_NEW_PRIVS -- no_new_privs is NOT forced on
+## (verified: NoNewPrivs=0 for this root+CAP_SYS_ADMIN service even with MDWE and
+## SystemCallFilter= set; a USER-scope service, lacking CAP_SYS_ADMIN, would
+## instead have it forced to 1). Keeping it false lets an escalated admin action
+## still exec a SUID helper or use file capabilities, matching privleapd's
+## sudo-like role; privleapd itself escalates by dropping from root via shim.py
+## (Popen user=), which NNP=0 does not impede either way.
+## - SystemCallErrorNumber=EPERM: a denied syscall returns -EPERM (a catchable
+##   error), NOT the default SIGSYS kill. The memfd W^X bypass is still blocked
+##   (no fd is created), but an action that calls it fails soft, not by signal.
+## The W^X seccomp filter nonetheless INHERITS into the escalated actions (shim.py
+## -> Popen -> bash; seccomp inheritance is independent of no_new_privs) --
+## defense-in-depth on the escalated code. CAVEAT: SystemCallArchitectures=native
+## and LockPersonality inherit as well, so a 32-bit admin-action binary or one
+## that sets a READ_IMPLIES_EXEC personality is REFUSED. None exist on modern
+## amd64 Kicksecure; such a case fails loud (accepted, like the MDWE inheritance).
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+LockPersonality=true
+SystemCallFilter=~memfd_create
+SystemCallErrorNumber=EPERM
+NoNewPrivileges=false
+NoExecPaths=/run /tmp /var/tmp /dev/shm /dev
+
 [Install]
 WantedBy=multi-user.target

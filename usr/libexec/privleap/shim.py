@@ -1,4 +1,4 @@
-#!/usr/bin/python3 -su
+#!/usr/bin/python3 -Bsu
 
 # Copyright (C) 2025 - 2026 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 # See the file COPYING for copying conditions.
@@ -65,7 +65,9 @@ try:
     target_group_gid = int(target_group_gid_str)
     calling_user_info: pwd.struct_passwd = pwd.getpwuid(calling_user_uid)
     target_user_info: pwd.struct_passwd = pwd.getpwuid(target_user_uid)
-    target_group_info = grp.getgrgid(target_group_gid)
+    ## Validate the target group exists (raises on a missing gid, exiting 255);
+    ## Popen takes the numeric gid directly, so the struct itself is unused.
+    grp.getgrgid(target_group_gid)
 except Exception:
     sys.exit(255)
 
@@ -114,6 +116,7 @@ action_env["LOGNAME"] = target_user_info.pw_name
 action_env["SHELL"] = "/usr/bin/bash"
 action_env["PWD"] = target_user_info.pw_dir
 action_env["USER"] = target_user_info.pw_name
+action_env["PRIVLEAP_CALLER_UID"] = str(calling_user_uid)
 action_env["LC_ALL"] = "C"
 for env_var in pam_env_list:
     env_var_parts: list[str] = env_var.split("=", 1)

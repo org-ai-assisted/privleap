@@ -552,7 +552,7 @@ def run_leapctl_tests() -> None:
         "",
         "Create user for deleted user socket destroy test",
     )
-    leaprun_assert_command(
+    leapctl_assert_command(
         ["leapctl", "--reload"],
         exit_code=0,
         stdout_data=b"privleapd configuration reload successful.\n",
@@ -1582,6 +1582,7 @@ def leaprun_filter_env_var_test_stdout(
                 stdout_part.startswith(b"COVERAGE_PROCESS_START="),
                 stdout_part.startswith(b"COVERAGE_FILE="),
                 stdout_part.startswith(b"PYTHONPATH="),
+                stdout_part.startswith(b"SHLVL="),
             ]
         ):
             continue
@@ -2245,6 +2246,133 @@ def run_leaprun_tests() -> None:
         ["sudo", "-u", "privleaptestone", "leaprun", "qwe123!@#"],
         exit_code=1,
         stderr_data=b"ERROR: Signal name 'qwe123!@#' is invalid!\n",
+    )
+    # ---
+    leaprun_assert_command(
+        ["leaprun", "--user-override=qwerty", "test-act-multiuser-permit"],
+        exit_code=1,
+        stderr_data=b"ERROR: Account 'qwerty' does not exist!\n",
+    )
+    # ---
+    leaprun_assert_command(
+        ["leaprun", "--user-override=9999", "test-act-multiuser-permit"],
+        exit_code=1,
+        stderr_data=b"ERROR: Account '9999' does not exist!\n",
+    )
+    # ---
+    leaprun_assert_command(
+        ["leaprun", "--user-override=messagebus", "test-act-multiuser-permit"],
+        exit_code=0,
+        stdout_data=b"test-act-multiuser-permit\n",
+    )
+    # ---
+    leaprun_assert_command(
+        [
+            "leaprun",
+            f"--user-override={str(pwd.getpwnam("messagebus").pw_uid)}",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=0,
+        stdout_data=b"test-act-multiuser-permit\n",
+    )
+    # ---
+    leaprun_assert_command(
+        [
+            "leaprun",
+            "--user-override=messagebus",
+            "--",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=0,
+        stdout_data=b"test-act-multiuser-permit\n",
+    )
+    # ---
+    leaprun_assert_command(
+        ["leaprun", "--user-override=bin", "test-act-multiuser-permit"],
+        exit_code=1,
+        stderr_data=PlTestData.test_act_multiuser_permit_unauthorized,
+    )
+    # ---
+    leaprun_assert_command(
+        ["leapctl", "--create", "root"],
+        exit_code=0,
+        stdout_data=PlTestData.root_socket_created,
+    )
+    leaprun_assert_command(
+        [
+            "leaprun",
+            "--user-override=messagebus",
+            "--user-override-fakeroot-only",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=0,
+        stdout_data=b"test-act-multiuser-permit\n",
+    )
+    # ---
+    leaprun_assert_command(
+        [
+            "leaprun",
+            "--user-override=bin",
+            "--user-override-fakeroot-only",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=0,
+        stdout_data=b"test-act-multiuser-permit\n",
+    )
+    leaprun_assert_command(
+        ["leapctl", "--destroy", "root"],
+        exit_code=0,
+        stdout_data=PlTestData.root_socket_destroyed,
+    )
+    # ---
+    leaprun_assert_command(
+        [
+            "env",
+            "FAKEROOTKEY=12345",
+            "leaprun",
+            "--user-override=messagebus",
+            "--user-override-fakeroot-only",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=0,
+        stdout_data=b"test-act-multiuser-permit\n",
+    )
+    # ---
+    leaprun_assert_command(
+        [
+            "env",
+            "FAKEROOTKEY=12345",
+            "leaprun",
+            "--user-override=messagebus",
+            "--user-override-fakeroot-only",
+            "--",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=0,
+        stdout_data=b"test-act-multiuser-permit\n",
+    )
+    # ---
+    leaprun_assert_command(
+        [
+            "env",
+            "FAKEROOTKEY=12345",
+            "leaprun",
+            "--user-override=bin",
+            "--user-override-fakeroot-only",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=1,
+        stderr_data=PlTestData.test_act_multiuser_permit_unauthorized,
+    )
+    # ---
+    leaprun_assert_command(
+        [
+            "leaprun",
+            "--user-override-fakeroot-only",
+            "test-act-multiuser-permit",
+        ],
+        exit_code=1,
+        stderr_data=PlTestData.user_override_fakeroot_only_invalid,
     )
     ## ---
     stop_privleapd_subprocess()
@@ -3566,6 +3694,8 @@ def privleapd_invalid_ascii_test(test_data: str) -> bool:
         ## wait for the server to fully process the invalid data we've sent it.
         _ = comm_session.get_msg()
     except Exception:
+        ## Expected: the invalid data makes the server drop the connection, so
+        ## this read usually fails; we only needed to wait for it to process.
         pass
     comm_session.close_session()
     if compare_privleapd_stderr(
@@ -3747,6 +3877,7 @@ def privleapd_multithreading_test_monitor() -> None:
         try:
             linebuf += PlTestGlobal.privleapd_proc.stderr.read()
         except Exception:
+            ## Non-blocking stderr read may have nothing ready; retry next loop.
             pass
         time.sleep(0.1)
 
@@ -3785,6 +3916,8 @@ def privleapd_multithreading_test_worker(
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
             )
+        case _:
+            raise ValueError(f"Unrecognized mode '{mode}'")
     return return_proc
 
 
@@ -5310,9 +5443,14 @@ def main() -> NoReturn:
     erase_old_privleap_config()
     write_privleap_test_config()
 
-    run_leapctl_tests()
-    run_leaprun_tests()
-    run_privleapd_tests()
+    components_to_test: list[str] = sys.argv[1:]
+
+    if "leapctl" in components_to_test:
+        run_leapctl_tests()
+    if "leaprun" in components_to_test:
+        run_leaprun_tests()
+    if "privleapd" in components_to_test:
+        run_privleapd_tests()
 
     stop_privleapd_subprocess()
     print_result_summary()
