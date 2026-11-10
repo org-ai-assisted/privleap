@@ -3913,6 +3913,8 @@ def privleapd_multithreading_test_worker(
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
             )
+        case _:
+            raise ValueError(f"Unrecognized mode '{mode}'")
     return return_proc
 
 
